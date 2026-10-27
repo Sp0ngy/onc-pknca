@@ -1,0 +1,30 @@
+# R / RStudio
+.Rhistory
+.RData
+.Rproj.user/
+.Rapp.history
+
+# renv: library and caches are machine-specific; lockfile + activate.R are tracked
+renv/library/
+renv/local/
+renv/cellar/
+renv/lock/
+renv/python/
+renv/sandbox/
+renv/staging/
+
+# Generated outputs (regenerate with R/preprocess.R and R/run_nca.R)
+output/*
+!output/.gitkeep
+data/*
+!data/.gitkeep
+
+# Real study data must never be committed. Put it here (or outside the repo).
+data-raw/study/
+*.xlsx
+*.xls
+
+# IDE
+.idea/
+.vscode/
+main.py
