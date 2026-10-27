@@ -128,7 +128,8 @@ data/, output/              generated, git-ignored
 | `output/nca_parameters_long.csv` | all PKNCA results, original and standardised units |
 | `output/nca_summary.csv` | n, mean, SD, CV%, geo. mean, geo. CV%, median, min, max |
 | `output/lambda_z_diagnostics.csv`, `lambda_z_plots.pdf` | terminal-phase regression details and plots |
-| `output/urine_intervals.csv`, `urine_summary.csv` | Ae, fe per interval and cumulative |
+| `output/urine_intervals.csv`, `urine_summary.csv` | Ae, fe per interval and cumulative, excretion rate per interval |
+| `output/urine_rmax.csv`, `urine_rmax_summary.csv` | Rmax (max. urinary excretion rate) and TRmax (midpoint of that interval) |
 | `output/renal_clearance.csv`, `renal_clearance_summary.csv` | Ae(0–T), fe(0–T), plasma AUC(0–T), CLr |
 | `output/run_info_*.txt` | time, git commit, R/package versions, input MD5, full configuration |
 

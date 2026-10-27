@@ -8,6 +8,7 @@
 #           output/lambda_z_plots.pdf          log-linear plots with the selected regression points
 #           output/urine_intervals.csv         Ae and fe per collection interval, cumulative Ae / fe
 #           output/urine_summary.csv           descriptive statistics per interval
+#           output/urine_rmax.csv              Rmax (max. excretion rate) and TRmax per subject (+ summary)
 #           output/renal_clearance.csv         CLr per subject (+ summary rows)
 #           output/run_info_nca.txt            versions, checksums, configuration
 
@@ -90,8 +91,16 @@ local({
 if (nrow(urine)) {
   urine_res <- run_urine_nca(urine, dose, cfg)
   write_output(urine_res[, c("USUBJID", "SAMPLEID", "NFRLT", "NAEFRLT", "AFRLT", "AEFRLT", "AVAL", "VOLUME",
-                             "AE", "FE_PCT", "AE_CUM", "FE_CUM_PCT", "DOSEA")],
+                             "AE", "FE_PCT", "AE_CUM", "FE_CUM_PCT", "RATE", "MIDPOINT", "DOSEA")],
                "output/urine_intervals.csv", cfg)
+
+  rmax <- urine_rmax(urine_res)
+  names(rmax)[names(rmax) == "RMAX"] <- sprintf("RMAX [%s/%s]", cfg$units$dose, cfg$units$time)
+  names(rmax)[names(rmax) == "TRMAX"] <- sprintf("TRMAX [%s]", cfg$units$time)
+  names(rmax)[names(rmax) %in% c("NFRLT", "NAEFRLT")] <- c("RMAX_INTERVAL_START_NOMINAL", "RMAX_INTERVAL_END_NOMINAL")
+  write_output(rmax, "output/urine_rmax.csv", cfg)
+  write_output(do.call(rbind, lapply(names(rmax)[2:3], function(v) cbind(PARAMETER = v, describe(rmax[[v]])))),
+               "output/urine_rmax_summary.csv", cfg)
   urine_res$INTERVAL <- sprintf("%g-%g h", urine_res$NFRLT, urine_res$NAEFRLT)
   urine_long <- rbind(
     data.frame(urine_res[, c("NFRLT", "INTERVAL")], PARAMETER = sprintf("Ae [%s]", cfg$units$dose), VALUE = urine_res$AE),

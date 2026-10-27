@@ -73,6 +73,23 @@ test_that("urine: Ae per interval, cumulative Ae/fe and the PKNCA cross-check", 
   expect_equal(u$FE_PCT, c(25, 15, 10))
   expect_equal(u$AE_CUM, c(100, 160, 200))
   expect_equal(u$FE_CUM_PCT, c(25, 40, 50))
+
+  # excretion rates: 100/4 = 25, 60/4 = 15, 40/16 = 2.5 MBq/h; midpoints 2, 6, 16 h
+  expect_equal(u$RATE, c(25, 15, 2.5))
+  expect_equal(u$MIDPOINT, c(2, 6, 16))
+  r <- urine_rmax(u)
+  expect_equal(r$RMAX, 25)
+  expect_equal(r$TRMAX, 2)
+})
+
+test_that("Rmax uses the rate, not the amount: a long interval with more Ae can have a lower rate", {
+  u <- data.frame(USUBJID = "X", AFRLT = c(0, 4), AEFRLT = c(4, 24), NFRLT = c(0, 4), NAEFRLT = c(4, 24),
+                  AE = c(80, 200))
+  u$RATE <- u$AE / (u$AEFRLT - u$AFRLT)          # 20 and 10 MBq/h
+  u$MIDPOINT <- (u$AFRLT + u$AEFRLT) / 2
+  r <- urine_rmax(u)
+  expect_equal(r$RMAX, 20)
+  expect_equal(r$TRMAX, 2)
 })
 
 test_that("renal clearance = Ae(0-T) / plasma AUC(0-T)", {

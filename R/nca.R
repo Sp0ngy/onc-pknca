@@ -149,6 +149,9 @@ run_urine_nca <- function(urine, dose, cfg) {
   urine$AE <- urine$CONC_AMT * urine$VOLUME
   urine <- merge(urine[setdiff(names(urine), "DOSEA")], dose[, c("USUBJID", "DOSEA")], by = "USUBJID")
   urine$FE_PCT <- 100 * urine$AE / urine$DOSEA
+  # Urinary excretion rate per interval (amount per time) at the interval midpoint (actual times)
+  urine$RATE <- urine$AE / (urine$AEFRLT - urine$AFRLT)
+  urine$MIDPOINT <- (urine$AFRLT + urine$AEFRLT) / 2
 
   dose$TIME <- 0
   cfg_amt <- cfg
@@ -169,6 +172,22 @@ run_urine_nca <- function(urine, dose, cfg) {
   if (!isTRUE(all.equal(check, out$AE_CUM, tolerance = 1e-8))) {
     stop("Cumulative Ae from PKNCA differs from the sum of interval Ae")
   }
+  out
+}
+
+#' Maximum urinary excretion rate per subject: Rmax = max(Ae_i / (t_end,i - t_start,i)) and
+#' TRmax = midpoint of that collection interval (first interval if tied). Not a PKNCA parameter.
+#'
+#' @param urine_res output of run_urine_nca().
+urine_rmax <- function(urine_res) {
+  rows <- lapply(split(urine_res, urine_res$USUBJID), function(u) {
+    i <- which.max(u$RATE)
+    if (!length(i)) return(data.frame(USUBJID = u$USUBJID[1], RMAX = NA_real_, TRMAX = NA_real_, NFRLT = NA, NAEFRLT = NA))
+    data.frame(USUBJID = u$USUBJID[1], RMAX = u$RATE[i], TRMAX = u$MIDPOINT[i],
+               NFRLT = u$NFRLT[i], NAEFRLT = u$NAEFRLT[i])
+  })
+  out <- do.call(rbind, rows)
+  rownames(out) <- NULL
   out
 }
 
