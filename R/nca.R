@@ -136,20 +136,27 @@ param_units <- function(res_df) {
 #' up to the end of each collection come from PKNCA (ae, fe) with time = end of collection, where
 #' interval [0, end_k] contains exactly the collections ending at or before end_k.
 #'
+#' Concentrations are first converted to dose units per volume unit (e.g. kBq/mL -> MBq/mL), so
+#' that Ae is in the dose unit and fe = Ae / dose is dimensionless.
+#'
 #' @param urine data.frame with USUBJID, AFRLT (start), AEFRLT (end), NFRLT, NAEFRLT, AVAL, VOLUME.
 #' @param dose data.frame with USUBJID, DOSEA.
-#' @return data.frame, one row per collection interval.
+#' @return data.frame, one row per collection interval (AE, AE_CUM in units$dose).
 run_urine_nca <- function(urine, dose, cfg) {
+  amount_conc_unit <- sprintf("%s/%s", cfg$units$dose, cfg$units$volume)
   urine <- urine[order(urine$USUBJID, urine$AEFRLT), ]
-  urine$AE <- urine$AVAL * urine$VOLUME
+  urine$CONC_AMT <- urine$AVAL * unit_factor(cfg$units$conc, amount_conc_unit)
+  urine$AE <- urine$CONC_AMT * urine$VOLUME
   urine <- merge(urine[setdiff(names(urine), "DOSEA")], dose[, c("USUBJID", "DOSEA")], by = "USUBJID")
   urine$FE_PCT <- 100 * urine$AE / urine$DOSEA
 
   dose$TIME <- 0
-  o_conc <- PKNCA::PKNCAconc(urine, AVAL ~ AEFRLT | USUBJID, volume = "VOLUME")
+  cfg_amt <- cfg
+  cfg_amt$units$conc <- amount_conc_unit
+  o_conc <- PKNCA::PKNCAconc(urine, CONC_AMT ~ AEFRLT | USUBJID, volume = "VOLUME")
   o_dose <- PKNCA::PKNCAdose(dose, DOSEA ~ TIME | USUBJID, route = "intravascular")
   intervals <- data.frame(USUBJID = urine$USUBJID, start = 0, end = urine$AEFRLT, ae = TRUE, fe = TRUE)
-  d <- PKNCA::PKNCAdata(o_conc, o_dose, intervals = intervals, units = nca_units(cfg), options = nca_options(cfg))
+  d <- PKNCA::PKNCAdata(o_conc, o_dose, intervals = intervals, units = nca_units(cfg_amt), options = nca_options(cfg))
   res <- data.frame(as.data.frame(PKNCA::pk.nca(d)))
   cum <- stats::reshape(res[, c("USUBJID", "end", "PPTESTCD", "PPSTRES")], idvar = c("USUBJID", "end"),
                         timevar = "PPTESTCD", direction = "wide")
@@ -204,7 +211,8 @@ run_renal_clearance <- function(plasma, urine_res, dose, cfg) {
   }, numeric(1))
   last$AUC_UNIT <- sprintf("%s*%s", cfg$units$time, cfg$units$conc)
   names(last)[names(last) == "AEFRLT"] <- "T_H"
-  # (MBq) / (h * MBq/mL) = mL/h -> L/h
-  last$CLR_L_PER_H <- last$AE_CUM / last$AUC_PLASMA_0_T / 1000
+  # e.g. MBq / (h * kBq/mL) -> L/h
+  clr_unit <- sprintf("%s/(%s*%s)", cfg$units$dose, cfg$units$time, cfg$units$conc)
+  last$CLR_L_PER_H <- last$AE_CUM / last$AUC_PLASMA_0_T * unit_factor(clr_unit, "L/h")
   last
 }

@@ -15,6 +15,8 @@ load_config <- function(path = "config/config.yml") {
   }
   cfg$nuclide$half_life_h <- cfg$nuclide$half_life * TIME_UNIT_TO_H[[unit]]
   stopifnot(
+    cfg$input$format %in% c("concentrations", "gamma_counts"),
+    cfg$units$dose == "MBq",            # dosing file columns are in MBq
     is.logical(cfg$decay_correction$to_injection),
     cfg$blq$rule %in% BLQ_RULES,
     cfg$blq$rule_urine %in% BLQ_RULES,
@@ -30,6 +32,12 @@ decay_label <- function(to_injection) {
   } else {
     "Not decay-corrected to injection time (effective half-life)"
   }
+}
+
+#' Multiplicative factor converting a value from unit `from` to unit `to` (units/udunits syntax),
+#' e.g. unit_factor("kBq/mL", "MBq/mL") = 0.001.
+unit_factor <- function(from, to) {
+  as.numeric(units::set_units(units::set_units(1, from, mode = "standard"), to, mode = "standard"))
 }
 
 # ---- time and decay ----------------------------------------------------------------------------
@@ -108,10 +116,11 @@ counts_to_mbq_per_ml <- function(gross_counts, count_time_min, background_cpm,
 #' @param lloq LLOQ (scalar or per sample).
 #' @param conc_for_blq values compared against the LLOQ (default `conc`); used to judge BLQ on
 #'   the as-sampled activity while `conc` may be decay-corrected to injection.
+#' @param blq_flag samples already reported as BLQ in the input (e.g. "BLQ" instead of a value).
 #' @return list(conc = processed concentrations, blq = logical BLQ flag).
-apply_blq_rule <- function(conc, lloq, rule, conc_for_blq = conc) {
+apply_blq_rule <- function(conc, lloq, rule, conc_for_blq = conc, blq_flag = FALSE) {
   rule <- match.arg(rule, BLQ_RULES)
-  blq <- !is.na(conc_for_blq) & conc_for_blq < lloq
+  blq <- (!is.na(conc_for_blq) & conc_for_blq < lloq) | rep_len(blq_flag, length(conc))
   quant <- which(!blq & !is.na(conc))
   before_first <- if (length(quant)) seq_along(conc) < min(quant) else rep(TRUE, length(conc))
   lloq <- rep_len(lloq, length(conc))

@@ -20,8 +20,18 @@ nuclide:
 decay_correction:
   to_injection: true
 
-# Raw input files (relative to project root). Real study data belongs in data-raw/study/ (git-ignored).
+# Input files (relative to project root). Real study data belongs in data-raw/study/ (git-ignored).
+# Two input formats (see templates/README.md):
+#   concentrations : activity concentrations per sample vs. time after injection (h), e.g. from the lab
+#   gamma_counts   : raw gamma counter data (counts, background, calibration, date-times)
 input:
+  format: "concentrations"
+  # format "concentrations"
+  concentrations: "data-raw/dummy_concentrations.csv"
+  concentrations_dosing: "data-raw/dummy_dosing_concentrations.csv"
+  conc_unit: "kBq/mL"                       # unit of the CONC column
+  decay_corrected_to_injection: true        # true: CONC is already decay-corrected to injection time
+  # format "gamma_counts"
   samples: "data-raw/dummy_gamma_counts.csv"
   dosing: "data-raw/dummy_dosing.csv"
 
@@ -31,24 +41,27 @@ density_g_per_ml:
   PLASMA: 1.025
   URINE: 1.02
 
-# Lower limit of quantification in MBq/mL, applied to the activity concentration as present at
-# sampling time (i.e. before any decay correction to injection), per matrix.
+# Lower limit of quantification in units$conc, applied to the activity concentration as present at
+# sampling time (i.e. without decay correction to injection), per matrix.
+# Set to 0 if BLQ has already been handled in the input (BLQ samples can also be left empty).
 # BLQ rules:
 #   pre_zero_post_missing : BLQ before first quantifiable value -> 0, after -> missing (dropped)
 #   zero                  : all BLQ -> 0
 #   missing               : all BLQ -> missing (dropped)
 #   half_lloq             : BLQ before first quantifiable -> 0, after -> LLOQ/2
 blq:
-  lloq_mbq_per_ml:
-    BLOOD: 0.0001
-    PLASMA: 0.0001
-    URINE: 0.0001
+  lloq:
+    BLOOD: 0.1
+    PLASMA: 0.1
+    URINE: 0.1
   rule: "pre_zero_post_missing"     # blood and plasma
   rule_urine: "zero"                # urine: BLQ interval contributes 0 to Ae
 
+# Analysis and reporting units. conc may differ from input$conc_unit (converted on input).
+# CL is always reported in L/h, Vz in L, fe in %; Ae in units$dose.
 units:
-  conc: "MBq/mL"
-  dose: "MBq"
+  conc: "kBq/mL"
+  dose: "MBq"                         # dosing file: NET_INJECTED_MBQ / SYRINGE_*_MBQ are in MBq
   time: "h"
   volume: "mL"
 

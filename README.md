@@ -33,7 +33,10 @@ unit tests, and git history. Only synthetic data is in the repository.
    ```r
    renv::restore()
    ```
-5. **Preprocess** raw gamma counter data → `data/adnca.csv` + concentration and B:P tables in `output/`:
+5. **Preprocess** the input data → `data/adnca.csv` + concentration and B:P tables in `output/`.
+   Input is either decay-corrected concentrations (e.g. kBq/mL) vs. time after injection in h
+   (`input: format: "concentrations"`, default) or raw gamma counter data (`"gamma_counts"`),
+   see [templates/README.md](templates/README.md):
    ```r
    source("R/preprocess.R")
    ```
@@ -58,9 +61,10 @@ If R says it cannot write to the library during step 4, create the user library 
 
 ```
 config/config.yml           nuclide half-life, decay correction on/off, BLQ rule, LLOQ, units, NCA settings
-templates/                  CSV templates for gamma counter samples + dosing, with column documentation
-data-raw/make_dummy_data.R  generator of the synthetic study (seeded, reproducible)
-data-raw/dummy_*.csv        synthetic Lu-177 study: 8 subjects, blood + plasma + urine
+templates/                  CSV templates for both input formats (concentrations, gamma counts) + dosing
+data-raw/make_dummy_data.R  generator of the synthetic study as raw gamma counts (seeded, reproducible)
+data-raw/make_dummy_concentrations.R  converts it to decay-corrected kBq/mL vs. h
+data-raw/dummy_*.csv        synthetic Lu-177 study: 8 subjects, blood + plasma + urine, both formats
 data-raw/study/             place for real study data - git-ignored, never commit it
 R/functions.R               decay correction, counts -> MBq/mL, dose, BLQ, B:P ratio, statistics
 R/nca.R                     PKNCA wrappers: blood/plasma NCA, urine Ae/fe, CLr
@@ -74,7 +78,14 @@ data/, output/              generated, git-ignored
 
 ## Calculation conventions
 
-* **Counts → activity concentration:**
+* **Input format `concentrations`:** CONC is converted from `input: conc_unit` to `units: conc`
+  (default kBq/mL for both). If it is already decay-corrected to injection time
+  (`input: decay_corrected_to_injection: true`), the as-sampled value used for BLQ and for the
+  effective mode is C × e^(−λp·t) with t = sampling time (urine: end of collection).
+  `BLQ`/`<LLOQ`-type entries are treated as BLQ.
+* **Units:** concentrations and AUC are reported in `units: conc` (kBq/mL, h·kBq/mL),
+  dose and Ae in MBq, CL and CLr in L/h, Vz in L, fe in %.
+* **Counts → activity concentration (format `gamma_counts`):**
   `MBq/mL = (GROSS_COUNTS / COUNT_TIME_MIN − BACKGROUND_CPM) / CAL_CPM_PER_BQ × DILUTION_FACTOR / aliquot mL / 10⁶`.
   Aliquot weight is converted with the matrix density if no volume is given.
 * **Decay correction (two steps):**
@@ -130,11 +141,18 @@ data/, output/              generated, git-ignored
 3. **NCA setup:** select matrices **BLOOD** and **PLASMA** only (urine rows are concentrations of
    collected urine, not a plasma-like profile). AUC method "lin up/log down".
    aNCA detects the profiles as "Single IV Bolus" and back-extrapolates C0 for AUC (same as the script).
-4. **Units:** aNCA shows CL as `MBq/(h*MBq/mL)` and Vz as `MBq/(MBq/mL)` (= mL/h and mL);
-   set L/h and L in the units dialog if wanted.
+   Leave **Impute Concentration** on. Flag rule R2ADJ defaults to 0.7; set 0.9 to match the script.
+4. **Units:** with kBq/mL and MBq, aNCA labels CL `MBq/(h*kBq/mL)` and Vz `MBq/(kBq/mL)`, which
+   are numerically L/h and L; set them in the units dialog to get the labels.
+   fe is shown as kBq/MBq (×0.1 = %), Ae in kBq.
 5. **Urine (Excretion tab):** select URINE, end time column **AEFRLT**, and **untick
    "Adjust for Body Weight"** (ticked by default; it multiplies the dose by body weight).
    See the known issue below before using per-interval Ae from aNCA.
+6. **Mapping → Grouping_Variables:** aNCA pre-fills AGE and SEX; remove AGE (it makes every subject
+   its own group in the summaries).
+7. **Exploration → Mean Plots:** the default grouping DOSEA gives "Data issue" because every subject
+   has an individual injected activity. Switch to PCSPEC by *first adding* PCSPEC and *then* removing
+   DOSEA — an empty grouping field crashes the app (see findings).
 
 ## Findings of this test
 
@@ -143,8 +161,8 @@ data/, output/              generated, git-ignored
 `tests/check_anca.R` replays aNCA's upload → mapping → `PKNCA_create_data_object()` →
 `PKNCA_update_data_object()` → `PKNCA_calculate_nca()` on `data/adnca.csv`. For all 16
 profiles (8 subjects × blood/plasma) Cmax, Tmax, AUC0-t, AUC0-inf, %extrap, λz, t½, adj. R², n points,
-CL and Vz are **identical** to `R/run_nca.R` (relative difference 0). The data mapping accepts
-MBq/mL and MBq without changes.
+CL and Vz are **identical** to `R/run_nca.R` (relative difference 0), with kBq/mL as well as
+MBq/mL concentrations. The data mapping accepts both without changes.
 
 ### 2. Urine: aNCA has an excretion module, but per-interval Ae is wrong in aNCA 0.1.0
 
@@ -197,14 +215,29 @@ pharmaverse/aNCA.
 
 ### 5. aNCA data mapping vs. radioactivity data
 
-* MBq, MBq/mL, h and mL are all understood by the `units` package aNCA uses; no conflicts.
-* Derived units stay unsimplified (`MBq/(h*MBq/mL)`) unless converted in the units dialog.
+* MBq, kBq/mL, MBq/mL, h and mL are all understood by the `units` package aNCA uses; no conflicts.
+* Derived units stay unsimplified (`MBq/(h*kBq/mL)`) unless converted in the units dialog.
 * `PARAM` = "Total radioactivity" is a single analyte; aNCA's metabolite flag stays empty
   (gamma counting does not separate parent, metabolites and free nuclide).
 * Required columns AVALU, RRLTU and DOSEU are mandatory in the mapping (not only the columns
   listed in the aNCA manual).
 * `ROUTE = "INTRAVENOUS"` is classified as intravascular; `ADOSEDUR = 0` → IV bolus,
   > 0 → IV infusion (C0 = 0 instead of back-extrapolation).
+
+### 6. aNCA app issues found during the GUI walkthrough (0.1.0)
+
+* **Crash with an empty mean-plot grouping:** removing the last variable from
+  Exploration → Mean Plots → "group by" calls `interaction()` without factors and stops the R
+  session ("Keine Faktoren angegeben" / "No factors specified"); the app has to be restarted and the
+  data re-uploaded.
+* **Broken option in the same list:** an entry `function () { if (.destroyed) …` (a Shiny reactive
+  printed instead of its value) appears among the grouping variables.
+* **Default mean-plot grouping DOSEA** does not fit individually measured activities (every group
+  has n = 1 → "Data issue: No data with more than 3 points").
+* **Ratio calculations:** test/reference groups are easy to swap; check that the AUC ratio is
+  blood/plasma (≈ 0.66 here), not plasma/blood (≈ 1.5).
+* Session state lives only in memory: after a crash or restart all settings, point exclusions
+  and results are lost unless exported.
 
 ## Out of scope (for now)
 

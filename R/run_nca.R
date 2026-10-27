@@ -94,9 +94,9 @@ if (nrow(urine)) {
                "output/urine_intervals.csv", cfg)
   urine_res$INTERVAL <- sprintf("%g-%g h", urine_res$NFRLT, urine_res$NAEFRLT)
   urine_long <- rbind(
-    data.frame(urine_res[, c("NFRLT", "INTERVAL")], PARAMETER = "Ae [MBq]", VALUE = urine_res$AE),
+    data.frame(urine_res[, c("NFRLT", "INTERVAL")], PARAMETER = sprintf("Ae [%s]", cfg$units$dose), VALUE = urine_res$AE),
     data.frame(urine_res[, c("NFRLT", "INTERVAL")], PARAMETER = "fe [%]", VALUE = urine_res$FE_PCT),
-    data.frame(urine_res[, c("NFRLT", "INTERVAL")], PARAMETER = "Ae cumulative [MBq]", VALUE = urine_res$AE_CUM),
+    data.frame(urine_res[, c("NFRLT", "INTERVAL")], PARAMETER = sprintf("Ae cumulative [%s]", cfg$units$dose), VALUE = urine_res$AE_CUM),
     data.frame(urine_res[, c("NFRLT", "INTERVAL")], PARAMETER = "fe cumulative [%]", VALUE = urine_res$FE_CUM_PCT)
   )
   write_output(summarise_by(urine_long, c("PARAMETER", "NFRLT", "INTERVAL"), "VALUE")[, -2],
