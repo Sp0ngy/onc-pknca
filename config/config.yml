@@ -1,0 +1,77 @@
+# Analysis configuration for radiopharmaceutical PK (total radioactivity, gamma counter).
+# Every value here is written into output/run_info.txt so each run is traceable.
+
+study:
+  studyid: "ONC-DUMMY-001"
+  drug: "[177Lu]Lu-DUMMY"          # DOSETRT in the ADNCA file
+  param: "Total radioactivity"      # PARAM in the ADNCA file (gamma counting = parent + metabolites + free nuclide)
+  paramcd: "TOTRAD"
+
+nuclide:
+  name: "Lu-177"
+  half_life: 6.647                  # physical half-life (Lu-177: 6.647 d, NNDC/ENSDF)
+  half_life_unit: "d"               # s | min | h | d
+
+# Gamma counter samples are always decay-corrected from counting time back to the time the sample
+# existed in the body (blood/plasma: sampling time; urine: end of collection interval).
+# Additionally, decay correction to injection time can be switched on/off:
+#   true  -> activity decay-corrected to injection time  -> lambda_z / t1/2 = BIOLOGICAL
+#   false -> activity as present at sampling time         -> lambda_z / t1/2 = EFFECTIVE
+decay_correction:
+  to_injection: true
+
+# Input files (relative to project root). Real study data belongs in data-raw/study/ (git-ignored).
+# Two input formats (see templates/README.md):
+#   concentrations : activity concentrations per sample vs. time after injection (h), e.g. from the lab
+#   gamma_counts   : raw gamma counter data (counts, background, calibration, date-times)
+input:
+  format: "concentrations"
+  # format "concentrations"
+  concentrations: "data-raw/dummy_concentrations.csv"
+  concentrations_dosing: "data-raw/dummy_dosing_concentrations.csv"
+  conc_unit: "kBq/mL"                       # unit of the CONC column
+  decay_corrected_to_injection: true        # true: CONC is already decay-corrected to injection time
+  # format "gamma_counts"
+  samples: "data-raw/dummy_gamma_counts.csv"
+  dosing: "data-raw/dummy_dosing.csv"
+
+# Density (g/mL) used only when an aliquot is weighed instead of pipetted (ALIQUOT_VOLUME_ML empty).
+density_g_per_ml:
+  BLOOD: 1.06
+  PLASMA: 1.025
+  URINE: 1.02
+
+# Lower limit of quantification in units$conc, applied to the activity concentration as present at
+# sampling time (i.e. without decay correction to injection), per matrix.
+# Set to 0 if BLQ has already been handled in the input (BLQ samples can also be left empty).
+# BLQ rules:
+#   pre_zero_post_missing : BLQ before first quantifiable value -> 0, after -> missing (dropped)
+#   zero                  : all BLQ -> 0
+#   missing               : all BLQ -> missing (dropped)
+#   half_lloq             : BLQ before first quantifiable -> 0, after -> LLOQ/2
+blq:
+  lloq:
+    BLOOD: 0.1
+    PLASMA: 0.1
+    URINE: 0.1
+  rule: "pre_zero_post_missing"     # blood and plasma
+  rule_urine: "zero"                # urine: BLQ interval contributes 0 to Ae
+
+# Analysis and reporting units. conc may differ from input$conc_unit (converted on input).
+# CL is always reported in L/h, Vz in L, fe in %; Ae in units$dose.
+units:
+  conc: "kBq/mL"
+  dose: "MBq"                         # dosing file: NET_INJECTED_MBQ / SYRINGE_*_MBQ are in MBq
+  time: "h"
+  volume: "mL"
+
+nca:
+  auc_method: "lin up/log down"     # "lin up/log down" | "linear" | "lin-log"
+  c0_imputation: "auto"             # auto (bolus -> start_logslope, infusion -> start_conc0) | start_logslope | start_conc0 | none
+  min_hl_points: 3                  # minimum points in terminal phase regression
+  allow_tmax_in_half_life: false
+  adj_r_squared_factor: 0.0001      # PKNCA default: prefer more points if adj. R2 within this tolerance
+  # Quality flags (values are reported, but flagged in column FLAGS):
+  max_aucinf_pext: 20               # %AUC extrapolated above this -> flagged
+  min_hl_r_squared: 0.9             # adj. R2 of lambda_z regression below this -> flagged
+  min_span_ratio: 2                 # (time span of regression) / t1/2 below this -> flagged
